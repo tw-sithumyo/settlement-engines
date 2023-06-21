@@ -1,7 +1,7 @@
 // Code taken from: https://github.com/synlestidae/ethereum-tx-sign/
 use ethereum_types::{H160, H256, U256};
 use rlp::RlpStream;
-use secp256k1::key::SecretKey;
+use secp256k1::SecretKey;
 use secp256k1::Message;
 use secp256k1::Secp256k1;
 use tiny_keccak::keccak256;
@@ -74,7 +74,7 @@ fn ecdsa_sign(hash: &[u8], private_key: &[u8], chain_id: u8) -> EcdsaSig {
     let s = Secp256k1::signing_only();
     let msg = Message::from_slice(hash).unwrap();
     let key = SecretKey::from_slice(private_key).unwrap();
-    let (v, sig_bytes) = s.sign_recoverable(&msg, &key).serialize_compact();
+    let (v, sig_bytes) = s.sign_ecdsa_recoverable(&msg, &key).serialize_compact();
 
     EcdsaSig {
         // EIP155: https://github.com/ethereum/EIPs/blob/master/EIPS/eip-155.md

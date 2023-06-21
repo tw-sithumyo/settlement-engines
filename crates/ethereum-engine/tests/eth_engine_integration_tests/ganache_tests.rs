@@ -90,7 +90,9 @@ async fn test_send_erc20() {
         .await
         .unwrap();
 
-    let bob_mock = mockito::mock("POST", "/accounts/42/settlements")
+    let mut server = mockito::Server::new();
+
+    let bob_mock = server.mock("POST", "/accounts/42/settlements")
         .match_body(mockito::Matcher::JsonString(
             json!(Quantity::new(100_000_000_000u64, 18)).to_string(),
         ))
@@ -98,7 +100,7 @@ async fn test_send_erc20() {
         .with_body(json!(Quantity::new(100, 9)).to_string())
         .create();
 
-    let bob_connector_url = mockito::server_url();
+    let bob_connector_url = server.url();
     let _bob_engine = test_engine(
         bob_store.clone(),
         BOB_PK.clone(),
@@ -131,7 +133,7 @@ async fn test_send_erc20() {
     }
 
     // wait a few seconds so that the receiver's engine that does the polling
-    tokio::time::delay_for(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     // did token balances update correctly?
     let token_balance = |address| {
@@ -189,7 +191,8 @@ async fn test_send_eth() {
 
     let mut ganache_pid = start_ganache(8545);
 
-    let bob_mock = mockito::mock("POST", "/accounts/42/settlements")
+    let mut server = mockito::Server::new();
+    let bob_mock = server.mock("POST", "/accounts/42/settlements")
         .match_body(mockito::Matcher::JsonString(
             json!(Quantity::new(100_000_000_001u64, 18)).to_string(),
         ))
@@ -197,7 +200,7 @@ async fn test_send_eth() {
         .with_body(json!(Quantity::new(100, 9)).to_string())
         .create();
 
-    let bob_connector_url = mockito::server_url();
+    let bob_connector_url = server.url();
     let _bob_engine = test_engine(
         bob_store.clone(),
         BOB_PK.clone(),
@@ -275,7 +278,7 @@ async fn test_send_eth() {
         (BigUint::from(1u32), 20)
     );
 
-    tokio::time::delay_for(Duration::from_secs(2)).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let (eloop, transport) = Http::new("http://localhost:8545").unwrap();
     eloop.into_remote();

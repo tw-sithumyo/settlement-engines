@@ -40,9 +40,9 @@ async fn eth_ledger_settlement() {
 
     // Each node will use its own DB within the redis instance
     let mut connection_info1 = context.get_client_connection_info();
-    connection_info1.db = 1;
+    connection_info1.redis.db = 1;
     let mut connection_info2 = context.get_client_connection_info();
-    connection_info2.db = 2;
+    connection_info2.redis.db = 2;
 
     let node1_http = get_open_port(Some(3010));
     let node1_settlement = get_open_port(Some(3011));
@@ -108,7 +108,7 @@ async fn eth_ledger_settlement() {
     )
     .await
     .unwrap();
-    node1.serve().await.unwrap();
+    node1.serve(None).await.unwrap();
     create_account_on_node(node1_http, alice_on_alice, "admin")
         .await
         .unwrap();
@@ -148,7 +148,7 @@ async fn eth_ledger_settlement() {
     )
     .await
     .unwrap();
-    node2.serve().await.unwrap();
+    node2.serve(None).await.unwrap();
     create_account_on_node(node2_http, bob_on_bob, "admin")
         .await
         .unwrap();

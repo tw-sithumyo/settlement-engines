@@ -208,6 +208,8 @@ where
 
         let (eloop, transport) = Http::new(ethereum_endpoint).unwrap();
         eloop.into_remote();
+        debug!("Connected to Ethereum node at: {}", ethereum_endpoint);
+
         let web3 = Web3::new(transport);
         let address = Addresses {
             own_address: self.signer.address(),
@@ -555,6 +557,9 @@ where
             Ok(amount) => amount,
             Err(_) => U256::from(100_000),
         };
+
+        // fetching account's nonce
+        debug!("Fetching nonce for account {}", own_address);
         let nonce = web3
             .eth()
             .transaction_count(own_address, Some(BlockNumber::Pending))
@@ -569,7 +574,7 @@ where
         let signed_tx = signer.sign_raw_tx(tx.clone(), chain_id); // 3
 
         let action = move || {
-            trace!("Sending tx to Ethereum: {}", hex::encode(&signed_tx));
+            debug!("Sending tx to Ethereum: {}", hex::encode(&signed_tx));
             web3.eth() // 4
                 // TODO use send_transaction_with_confirmation
                 .send_raw_transaction(signed_tx.clone().into())
@@ -641,6 +646,7 @@ where
         // own engine about its settlement information. Then,
         // we store that information and use it when
         // performing settlements.
+        debug!("Creating account: {:?}", account_id);
         let idempotency_uuid = Uuid::new_v4().to_hyphenated().to_string();
         let challenge = Uuid::new_v4().to_hyphenated().to_string();
         let challenge = challenge.into_bytes();
@@ -657,6 +663,8 @@ where
         let body =
             serde_json::to_string(&PaymentDetailsRequest::new(challenge_clone.clone())).unwrap();
         let url_clone = url.clone();
+
+        debug!("Sending PaymentDetailsRequest to connector url at '{:?}' with challange body '{:?}", url, challenge_clone);
         let action = move || {
             client
                 .post(url.as_ref())
@@ -683,7 +691,7 @@ where
         let data = prefixed_message(challenge_clone);
         let challenge_hash = Sha3::digest(&data);
         let recovered_address = payment_details.signature.recover(&challenge_hash);
-        trace!("Received payment details {:?}", payment_details);
+        debug!("Received PaymentDetailsResponse: {:?}", payment_details);
         match recovered_address {
             Ok(recovered_address) => {
                 if recovered_address.as_bytes() != &payment_details.to.own_address.as_bytes()[..] {
@@ -717,6 +725,7 @@ where
             };
             let idempotency_uuid = Uuid::new_v4().to_hyphenated().to_string();
             let client = Client::new();
+            debug!("Got Challenged. Sending PaymentDetailsResponse to connector url at '{:?}' with body '{:?}'", url_clone, resp);
             let action = move || {
                 client
                     .post(url_clone.as_ref())
@@ -740,7 +749,7 @@ where
 
         let data = HashMap::from_iter(vec![(account_id, payment_details.to)]);
         self.store
-            .save_account_addresses(data)
+            .save_account_addresses(data.clone())
             .map_err(move |err| {
                 let err_type = ApiErrorType {
                     r#type: &ProblemType::Default,
@@ -752,6 +761,7 @@ where
                 ApiError::from_api_error_type(&err_type).detail(err)
             })
             .await?;
+        debug!("Saved account {:?} in Store.", data);
         Ok(ApiResponse::Default)
     }
 
@@ -760,6 +770,7 @@ where
         let store = self.store.clone();
         let account_id_clone = account_id.clone();
         // Ensure account exists
+        debug!("Searching account {:?} to delete.", account_id);
         self.load_account(account_id.clone())
             .map_err(|err| {
                 let error_msg = format!("Error loading account {:?}", err);
@@ -771,6 +782,7 @@ where
         // if the load call succeeds, then the account exists and we must:
         // 1. delete their addresses
         // 2. clear their uncredited settlement amounts
+        debug!("Clearing account addresses for {:?}.", account_id);
         store
             .clear_uncredited_settlement_amount(account_id_clone.clone())
             .map_err(|err| {
@@ -778,6 +790,7 @@ where
                 ApiError::internal_server_error()
             })
             .await?;
+        debug!("Deleting account {:?}.", account_id);
         store
             .delete_accounts(vec![account_id])
             .map_err(move |_| {
@@ -811,6 +824,7 @@ where
             //     account_id, address
             // );
             // Otherwise, we save the received address
+            debug!("Received PaymentDetailsRequest {:?}", req);
             let data = prefixed_message(req.challenge);
             let signature = self.signer.sign_message(&data);
             let resp = {
@@ -820,16 +834,18 @@ where
                 (*guard).insert(account_id, challenge.clone());
                 // Respond with our address, a signature, and our own challenge
                 let ret = PaymentDetailsResponse::new(address, signature, Some(challenge));
+                debug!("Responding with {:?}", ret);
                 serde_json::to_vec(&ret).unwrap()
             };
             Ok(ApiResponse::Data(resp.into()))
         } else if let Ok(resp) = serde_json::from_slice::<PaymentDetailsResponse>(&body) {
-            debug!("Received payment details: {:?}", resp);
+            debug!("Received PaymentDetailsResponse: {:?}", resp);
             let challenge = self.challenges.read().clone();
             let challenge = if let Some(challenge) = challenge.get(&account_id) {
                 challenge
             } else {
                 // if we did not send them a challenge, do nothing
+                debug!("No challenge found in response. Replying with: {:?}", ApiResponse::Default);
                 return Ok(ApiResponse::Default);
             };
 
@@ -840,17 +856,19 @@ where
             let challenge_hash = Sha3::digest(&data);
             match resp.signature.recover(&challenge_hash) {
                 Ok(recovered_address) => {
+                    debug!("Challenge signature verified.");
                     if recovered_address.as_bytes() == &resp.to.own_address.as_bytes()[..] {
                         // If the signature was correct, save the provided address to the store
                         let data = HashMap::from_iter(vec![(account_id, resp.to)]);
                         store
-                            .save_account_addresses(data)
+                            .save_account_addresses(data.clone())
                             .map_err(move |err| {
                                 let error_msg = format!("Couldn't connect to store {:?}", err);
                                 error!("{}", error_msg);
                                 ApiError::internal_server_error() // .detail(error_msg)
                             })
                             .await?;
+                        debug!("Saved account in Store: {:?}. And Replying back with: {:?}", data, ApiResponse::Default);
                         Ok(ApiResponse::Default)
                     } else {
                         // If the signature did not match, we should return an error
@@ -941,6 +959,7 @@ where
         };
 
         // Execute the settlement
+        debug!("Total amount to be settled: {:?}", total_amount);
         self.settle_to(addresses.own_address, total_amount, addresses.token_address)
             .map_err(move |_| {
                 let error_msg = "Error connecting to the blockchain.".to_string();
@@ -1009,6 +1028,7 @@ pub mod redis_bin {
         // TODO make key compatible with
         // https://github.com/tendermint/signatory to have HSM sigs
 
+        debug!("redis connection: {:?}", opt.redis_connection);
         let ethereum_store = EthereumLedgerRedisStoreBuilder::new(opt.redis_connection.clone())
             .connect()
             .await?;
@@ -1109,12 +1129,14 @@ mod tests {
 
         // simulate our connector that accepts the request, forwards it to the
         // peer's connector and returns the peer's se addresses
-        let m = mockito::mock("POST", MESSAGES_API.clone())
+        let mut server = mockito::Server::new();
+
+        let m = server.mock("POST", MESSAGES_API.clone())
             .with_status(200)
             .with_body(body_se_data)
             .expect(1) // only 1 request is made to the connector (idempotency works properly)
             .create();
-        let connector_url = mockito::server_url();
+        let connector_url = server.url();
 
         // alice sends a create account request to her engine
         // which makes a call to bob's connector which replies with bob's

@@ -9,8 +9,8 @@ edition = "2018"
 [dependencies]
 hex = "0.3.2"
 web3 = "0.8.0"
-log = "0.4.6"
-tokio = { version = "0.2.8", features = ["macros", "rt-core", "time"] }
+log = "0.4.19"
+tokio = { version = "1.28.2", features = ["full"] }
 hyper = "0.13"
 futures = { version = "0.3", features = ["compat"] }
 interledger-service = { git = "https://github.com/interledger-rs/interledger-rs", branch = "master" }
@@ -18,44 +18,44 @@ interledger-http = { git = "https://github.com/interledger-rs/interledger-rs", b
 interledger-settlement = { git = "https://github.com/interledger-rs/interledger-rs", branch = "master", default-features = false  }
 interledger-errors = { git = "https://github.com/interledger-rs/interledger-rs", branch = "master", default-features = false  }
 ethabi = "8.0.1"
-serde = { version = "1.0.101", default-features = false }
-serde_json = { version = "1.0.41", default-features = false }
-json = "0.11.14"
-bytes = "0.5"
-ring = "0.16.9"
-url = "2.1.0"
-reqwest = "0.10"
+serde = { version = "1.0.164", default-features = false }
+serde_json = { version = "1.0.97", default-features = false }
+json = "0.11.15"
+bytes = "1.4.0"
+ring = "0.16.20"
+url = "2.4.0"
+reqwest = { version = "0.10", features = ["json"] }
 env_logger = "0.6.2"
-uuid = { version = "0.8.1", features = ["serde", "v4"]  }
+uuid = { version = "0.8.2", features = ["serde", "v4"]  }
 tokio-retry = "0.2.0"
-redis_crate = { package = "redis", version = "0.15.1", features = ["tokio-rt-core"], optional = true }
+redis_crate = { package = "redis", version = "0.21.7", features = ["tokio-comp"], optional = true }
 http = "0.2"
-clap = "2.32.0"
-clarity = "0.1.22"
+clap = "2.34.0"
+clarity = "0.1.27"
 sha3 = "0.8.2"
-num-bigint = "0.2.2"
-num-traits = "0.2.8"
+num-bigint = "0.2.6"
+num-traits = "0.2.15"
 lazy_static = "1.4.0"
 secrecy = { version = "0.6", features = ["serde", "bytes"] }
-zeroize = { version = "1.0.0" }
+zeroize = { version = "1.6.0" }
 parking_lot = "0.9.0"
 config = { version = "0.9.3", features = [ "json", "yaml" ] }
-libc = "0.2.62"
-tiny-keccak="1.4.2"
-secp256k1 ="0.15.5"
-rlp ="0.4.2"
+libc = "0.2.146"
+tiny-keccak="1.5.0"
+secp256k1 = { version = "0.27.0", features = ["recovery"] }
+rlp ="0.4.6"
 ethereum-types ="0.6.0"
-warp = "0.2"
-async-trait = "0.1.22"
+warp = "0.3.5"
+async-trait = "0.1.68"
 
 
 [dev-dependencies]
-lazy_static = "1.3"
-mockito = "0.20.0"
+lazy_static = "1.4"
+mockito = "1.1.0"
 parking_lot = "0.9.0"
-net2 = "0.2.33"
-os_type = "2.2.0"
-rand = "0.7.0"
+net2 = "0.2.39"
+os_type = "2.6.0"
+rand = "0.7.3"
 interledger = { git = "https://github.com/interledger-rs/interledger-rs", branch = "master" }
 ilp-node = { git = "https://github.com/interledger-rs/interledger-rs", branch = "master" }
 
