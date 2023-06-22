@@ -7,7 +7,7 @@ use futures::TryFutureExt;
 
 use async_trait::async_trait;
 use clarity::Signature;
-use log::{debug, error, trace};
+use log::{debug, error};
 use parking_lot::RwLock;
 use sha3::{Digest, Keccak256 as Sha3};
 use std::collections::HashMap;
@@ -300,12 +300,15 @@ where
         let net_version = self.net_version.clone();
 
         // get the current block number
-        let current_block = web3
+        let current_block = match web3
             .eth()
             .block_number()
             .await
-            .map_err(move |err| error!("Could not fetch current block number {:?}", err))
-            .unwrap();
+            .map_err(move |err| error!("Could not fetch current block number {:?}", err)) 
+            {
+                Ok(block) => block,
+                Err(_) => return Ok(()),
+        };
 
         // get the safe number of blocks to avoid reorgs
         let to_block = current_block - confirmations;
@@ -329,7 +332,7 @@ where
             U256::from(to_block.as_u64())
         };
 
-        trace!("Fetching txs from block {} until {}", from_block, to_block);
+        debug!("Fetching txs from block {} until {}", from_block, to_block);
 
         // TODO: Make this work with join_all!
         if let Some(token_address) = token_address {
@@ -366,7 +369,7 @@ where
             }
         }
 
-        trace!("Processed all transactions up to block {}", to_block);
+        debug!("Processed all transactions up to block {}", to_block);
         // now that all transactions have been processed successfully, we
         // can save `to_block` as the latest observed block
         self.store
@@ -418,7 +421,7 @@ where
         // This is a no-op if the operation was already processed
         if !is_tx_processed {
             if let Some((from, amount)) = sent_to_us(tx, our_address) {
-                trace!(
+                debug!(
                     "Got transaction for our account from {} for amount {}",
                     from,
                     amount
@@ -487,7 +490,7 @@ where
                 error!("Exceeded max retries when notifying connector about account {:?} for amount {:?} and transaction hash {:?}. Please check your API.", account_id_clone, amount_clone, tx_hash)
             })
             .await?;
-        trace!("Accounting system responded with {:?}", ret);
+        debug!("Accounting system responded with {:?}", ret);
         Ok(())
     }
 
