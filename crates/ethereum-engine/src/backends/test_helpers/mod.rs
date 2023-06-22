@@ -219,7 +219,7 @@ impl TestContext {
     pub async fn async_connection(&self) -> Result<redis::aio::Connection, ()> {
         self.client
             .get_async_connection()
-            .map_err(|err| panic!(err))
+            .map_err(|err| panic!("{}", err))
             .await
     }
 

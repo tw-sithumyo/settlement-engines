@@ -238,6 +238,7 @@ pub async fn get_balance<T: Display>(
     Ok(ret)
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct FaucetResponse {
     pub account: XrpCredentials,

@@ -126,7 +126,7 @@ impl EthereumLedgerTxSigner for Secret<String> {
 
     fn address(&self) -> Address {
         let private_key: PrivateKey = self.expose_secret().parse().unwrap();
-        let address = private_key.to_public_key().unwrap();
+        let address = private_key.to_address();
         let mut out = [0; 20];
         out.copy_from_slice(address.as_bytes());
         // Address type from clarity library must convert to web3 Address

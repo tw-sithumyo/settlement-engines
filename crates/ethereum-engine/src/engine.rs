@@ -2,7 +2,8 @@ use super::utils::{
     types::{Addresses, EthereumAccount, EthereumLedgerTxSigner, EthereumStore},
     web3::{filter_transfer_logs, make_tx, sent_to_us, ERC20Transfer, EthAddress},
 };
-use futures::{compat::Future01CompatExt, TryFutureExt};
+use ethereum_types::U64;
+use futures::TryFutureExt;
 
 use async_trait::async_trait;
 use clarity::Signature;
@@ -27,7 +28,6 @@ use url::Url;
 use uuid::Uuid;
 use web3::{
     api::Web3,
-    futures::Future as Future01,
     transports::Http,
     types::Transaction,
     types::{Address, BlockNumber, CallRequest, H256, U256},
@@ -206,8 +206,7 @@ where
             18
         };
 
-        let (eloop, transport) = Http::new(ethereum_endpoint).unwrap();
-        eloop.into_remote();
+        let transport = Http::new(ethereum_endpoint).unwrap();
         debug!("Connected to Ethereum node at: {}", ethereum_endpoint);
 
         let web3 = Web3::new(transport);
@@ -222,7 +221,6 @@ where
         let net_version = web3
             .net()
             .version()
-            .compat()
             .await
             .unwrap_or_else(|_| chain_id.to_string());
         let engine = EthereumLedgerSettlementEngine {
@@ -305,9 +303,9 @@ where
         let current_block = web3
             .eth()
             .block_number()
-            .compat()
+            .await
             .map_err(move |err| error!("Could not fetch current block number {:?}", err))
-            .await?;
+            .unwrap();
 
         // get the safe number of blocks to avoid reorgs
         let to_block = current_block - confirmations;
@@ -320,7 +318,7 @@ where
             .load_recently_observed_block(net_version.clone())
             .await?;
         let from_block = if let Some(last_observed_block) = last_observed_block {
-            if to_block == last_observed_block {
+            if to_block.as_u64() == last_observed_block.as_u64() {
                 // We already processed the latest block
                 return Ok(());
             } else {
@@ -328,7 +326,7 @@ where
             }
         } else {
             // Check only the latest block
-            to_block
+            U256::from(to_block.as_u64())
         };
 
         trace!("Fetching txs from block {} until {}", from_block, to_block);
@@ -341,8 +339,8 @@ where
                 token_address,
                 None,
                 Some(our_address),
-                BlockNumber::Number(from_block.low_u64()),
-                BlockNumber::Number(to_block.low_u64()),
+                BlockNumber::Number(from_block.as_u64().into()),
+                BlockNumber::Number(to_block),
             )
             .await?;
 
@@ -355,11 +353,10 @@ where
                 let maybe_block = self
                     .web3
                     .eth()
-                    .block_with_txs(BlockNumber::Number(block_num).into())
+                    .block_with_txs(BlockNumber::Number(U64::from(block_num)).into())
                     .map_err(move |err| {
                         error!("Got error while getting block {}: {:?}", block_num, err)
                     })
-                    .compat()
                     .await?;
                 if let Some(block) = maybe_block {
                     for tx in block.transactions {
@@ -373,7 +370,7 @@ where
         // now that all transactions have been processed successfully, we
         // can save `to_block` as the latest observed block
         self.store
-            .save_recently_observed_block(net_version, to_block)
+            .save_recently_observed_block(net_version, U256::from(to_block.as_u64()))
             .await
     }
 
@@ -481,13 +478,11 @@ where
                         account_id, amount, err
                     );
                 })
-                .compat()
         };
         let ret = Retry::spawn(
                 ExponentialBackoff::from_millis(10).take(MAX_RETRIES),
                 action,
             )
-            .compat()
             .map_err(move |_| {
                 error!("Exceeded max retries when notifying connector about account {:?} for amount {:?} and transaction hash {:?}. Please check your API.", account_id_clone, amount_clone, tx_hash)
             })
@@ -529,23 +524,25 @@ where
         let gas_price = web3
             .eth()
             .gas_price()
-            .compat()
             .map_err(|err| error!("could not fetch gas price {:?}", err))
             .await?;
         let gas_amount = match web3
             .eth()
             .estimate_gas(
                 CallRequest {
-                    to: estimate_gas_destination,
+                    to: Some(estimate_gas_destination),
                     from: None,
                     gas: None,
+                    access_list: None,
+                    max_fee_per_gas: None,
+                    max_priority_fee_per_gas: None,
+                    transaction_type: None,
                     gas_price: None,
                     value: Some(value),
                     data: Some(tx.data.clone().into()),
                 },
                 None,
             )
-            .compat()
             .await
         {
             // if the gas estimation fails, use a default amount that will never
@@ -563,7 +560,6 @@ where
         let nonce = web3
             .eth()
             .transaction_count(own_address, Some(BlockNumber::Pending))
-            .compat()
             .map_err(|err| error!("could not fetch nonce {:?}", err))
             .await?;
 
@@ -587,9 +583,8 @@ where
             ExponentialBackoff::from_millis(10).take(MAX_RETRIES),
             action,
         )
-        .compat()
-        .map_err(move |_err| {
-            error!("Unable to submit tx to Ethereum ledger");
+        .map_err(|_| {
+            error!("Exceeded max retries when sending transaction to Ethereum ledger");
         })
         .await?;
         debug!("Transaction submitted. Hash: {:?}", tx_hash);
@@ -672,14 +667,12 @@ where
                 .header("Idempotency-Key", idempotency_uuid.clone())
                 .body(body.clone())
                 .send()
-                .compat()
         };
 
         let resp = Retry::spawn(
             ExponentialBackoff::from_millis(10).take(MAX_RETRIES),
             action,
         )
-        .compat()
         .map_err(move |err| {
             let err = format!("Couldn't notify connector {:?}", err);
             error!("{}", err);
@@ -733,7 +726,6 @@ where
                     .header("Idempotency-Key", idempotency_uuid.clone())
                     .body(resp.clone())
                     .send()
-                    .compat()
                     .map_err(|err| error!("{}", err))
             };
 
@@ -742,7 +734,6 @@ where
                     ExponentialBackoff::from_millis(10).take(MAX_RETRIES),
                     action,
                 )
-                .compat()
                 .map_err(|err| error!("{:?}", err)),
             );
         }

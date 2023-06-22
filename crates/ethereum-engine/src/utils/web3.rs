@@ -1,6 +1,5 @@
 use super::RawTransaction;
 use ethabi::Token;
-use futures::compat::Future01CompatExt;
 use futures::TryFutureExt;
 use lazy_static::lazy_static;
 use log::error;
@@ -109,7 +108,6 @@ pub async fn filter_transfer_logs(
     let logs = web3
         .eth()
         .logs(filter)
-        .compat()
         .map_err(move |err| error!("Got error when fetching transfer logs{:?}", err))
         .await?;
 
@@ -145,7 +143,11 @@ pub async fn filter_transfer_logs(
 pub fn sent_to_us(tx: Transaction, our_address: Address) -> Option<(Address, U256)> {
     if let Some(to) = tx.to {
         if to == our_address {
-            Some((tx.from, tx.value))
+            if let Some(from) = tx.from {
+                return Some((from, tx.value));
+            }else{
+                None
+            }
         } else {
             None
         }

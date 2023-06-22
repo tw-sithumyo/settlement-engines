@@ -1,5 +1,4 @@
 use super::utils::*;
-use futures::compat::Future01CompatExt;
 use lazy_static::lazy_static;
 use mockito;
 use num_bigint::BigUint;
@@ -42,8 +41,7 @@ async fn test_send_erc20() {
     let _ = env_logger::try_init();
     let alice = ALICE.clone();
     let bob = BOB.clone();
-    let (eloop, transport) = Http::new(&format!("http://localhost:{}", ganache_port)).unwrap();
-    eloop.into_remote();
+    let transport = Http::new(&format!("http://localhost:{}", ganache_port)).unwrap();
     let web3 = Web3::new(transport);
     // deploy erc20 contract
     let erc20_bytecode = include_str!("./fixtures/erc20.code");
@@ -59,10 +57,8 @@ async fn test_send_erc20() {
             U256::from_dec_str("1000000000000000000000").unwrap(),
             alice.address,
         )
-        .expect("Correct parameters are passed to the constructor.")
-        .compat()
         .await
-        .unwrap();
+        .expect("Correct parameters are passed to the constructor.");
 
     let token_address = contract.address();
 
@@ -141,7 +137,6 @@ async fn test_send_erc20() {
         async move {
             let balance: U256 = contract_clone
                 .query("balanceOf", address, None, Options::default(), None)
-                .compat()
                 .await
                 .unwrap();
             balance
@@ -280,19 +275,16 @@ async fn test_send_eth() {
 
     tokio::time::sleep(Duration::from_secs(2)).await;
 
-    let (eloop, transport) = Http::new("http://localhost:8545").unwrap();
-    eloop.into_remote();
+    let transport = Http::new("http://localhost:8545").unwrap();
     let web3 = Web3::new(transport);
     let alice_balance = web3
         .eth()
         .balance(alice.address, None)
-        .compat()
         .await
         .unwrap();
     let bob_balance = web3
         .eth()
         .balance(bob.address, None)
-        .compat()
         .await
         .unwrap();
     let expected_alice = U256::from_dec_str("99999579899999999999").unwrap(); // 99ether - 21k gas - 100 gwei - 1 wei (only 1 tranasaction was made, despite the 2 zero-value settlement requests)
